@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Nuclear Reactor Simulation</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <h1>Nuclear Reactor Simulation</h1>
+  <button onclick="startReactor()">Start Reactor</button>
+  <input type="range" min="0" max="1000" value="0" id="temperatureSlider" oninput="updateTemperature(this.value)">
+  <p>Temperature: <span id="temperatureValue">0</span> K</p>
+  <pre id="reactorState"></pre>
+
+  <script src="script.js"></script>
+</body>
+</html>
