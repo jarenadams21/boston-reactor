@@ -17,3 +17,4 @@ References
 3. Explicit Quantum Gravity metrics and using it facilitate push and pull in the system
 4. High Density Matrices available
 5. Other cosmology I should get in there beyond N-toruses, RHS, bloch spheres, tetrahedrons and general topology
+6. Live "reality" band wave that represents how close the system adheres to real physical resutls like expected energy density of the reactor compared to actual, etc.
