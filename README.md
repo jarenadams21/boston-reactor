@@ -13,7 +13,7 @@ References
 
 ## Plans
 1. Code needs explicit Free Hamiltonians in RHS
-2. Particle groupings; need to extend to Bosons, Fermions, etc (extend beyond electron models)
+2. Particle groupings; need to extend to Bosons, Fermions, etc (extend beyond electron models to quarks)
 3. Explicit Quantum Gravity metrics and using it facilitate push and pull in the system
 4. High Density Matrices available
 5. Other cosmology I should get in there beyond N-toruses, RHS, bloch spheres, tetrahedrons and general topology
