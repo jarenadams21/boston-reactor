@@ -10,6 +10,10 @@ References
 
 [5] C. E. Rolfs and W. S. Rodney, “Cauldrons in the Cosmos,” University of Chicago Press, 1988.
 
+[6] O Manuel, "Nuetron Repulsion" : https://arxiv.org/pdf/1102.1499
+
+[7] Eleonora, Stefano, y Olga "Nuetrinos in Cosmology" : https://arxiv.org/html/2404.19322v1
+
 
 ## Plans
 1. Code needs explicit Free Hamiltonians in RHS
