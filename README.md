@@ -18,3 +18,4 @@ References
 4. High Density Matrices available
 5. Other cosmology I should get in there beyond N-toruses, RHS, bloch spheres, tetrahedrons and general topology
 6. Live "reality" band wave that represents how close the system adheres to real physical resutls like expected energy density of the reactor compared to actual, etc.
+7. Paged Indexes to different benches
