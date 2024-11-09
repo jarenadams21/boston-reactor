@@ -209,7 +209,7 @@ fn interaction_strength(distance: f64, temp1: f64, temp2: f64) -> f64 {
     let avg_temp = (temp1 + temp2) / 2.0;
     let temp_factor = (100.0 - avg_temp).max(0.0); // Cooler temperatures enhance interaction
     let base_strength = 1.0 / (distance * distance + 1.0); // Avoid division by zero
-    temp_factor * base_strength * -1e10
+    temp_factor * base_strength
 }
 
 // Function to simulate integral curves over the hypergraph

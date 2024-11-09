@@ -8,10 +8,18 @@
 <body>
   <h1>Nuclear Reactor Simulation</h1>
   <button onclick="startReactor()">Start Reactor</button>
-  <input type="range" min="0" max="1000" value="0" id="temperatureSlider" oninput="updateTemperature(this.value)">
+  <input
+    type="range"
+    min="0"
+    max="1000"
+    value="0"
+    id="temperatureSlider"
+    oninput="updateTemperature(this.value)"
+  />
   <p>Temperature: <span id="temperatureValue">0</span> K</p>
   <pre id="reactorState"></pre>
 
+  <!-- Include the compiled TypeScript -->
   <script src="script.js"></script>
 </body>
 </html>

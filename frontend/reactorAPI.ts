@@ -1,3 +1,4 @@
+/*
 async function startReactor() {
     const response = await fetch('http://localhost:8080/start', {
       method: 'POST',
@@ -24,6 +25,6 @@ async function getReactorState() {
     const data = await response.json();
     console.log(data);
   }
-  
+*/  
   
   
