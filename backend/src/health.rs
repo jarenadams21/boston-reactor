@@ -16,6 +16,8 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 
 use num_complex::Complex64;
+use num_complex::PI
+use std::f64::Constants::PI
 use rand::Rng;
 
 // Structure to hold geographic coordinates and temperature
@@ -207,7 +209,7 @@ fn haversine_distance(coord1: &Coordinates, coord2: &Coordinates) -> f64 {
 fn interaction_strength(distance: f64, temp1: f64, temp2: f64) -> f64 {
     // Use inverse square law, adjusted for temperature effects
     let avg_temp = (temp1 + temp2) / 2.0;
-    let temp_factor = (100.0 - avg_temp).max(0.0); // Cooler temperatures enhance interaction
+    let temp_factor = (100.0 - avg_temp).max(0.0) * PI; // Cooler temperatures enhance interaction
     let base_strength = 1.0 / (distance * distance + 1.0); // Avoid division by zero
     temp_factor * base_strength
 }
