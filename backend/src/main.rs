@@ -11,7 +11,7 @@ const TREE_GEORGIA: &str = "Southern Live Oak";      // Georgia State Tree
 const TREE_TENNESSEE: &str = "Tulip Poplar";         // Tennessee State Tree
 const TREE_MINNESOTA: &str = "Red Pine";             // Minnesota State Tree
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::f64::consts::PI;
@@ -19,13 +19,31 @@ use std::f64::consts::PI;
 use num_complex::Complex64;
 use rand::Rng;
 
-// Structure to hold geographic coordinates and temperature
+// Structure to hold 3D coordinates and other properties
 #[derive(Debug, Clone)]
 struct Coordinates {
-    latitude: f64,
-    longitude: f64,
-    temperature: f64, // Temperature in Celsius
+    x: f64, // x-coordinate in [0, 1]
+    y: f64, // y-coordinate in [0, 1]
+    z: f64, // z-coordinate in [0, 1]
+    temperature: f64,    // Temperature in Celsius
     linear_velocity: f64, // Linear velocity due to Earth's rotation
+}
+
+// Function to convert latitude and longitude to normalized 3D coordinates
+fn lat_lon_to_xyz(latitude: f64, longitude: f64) -> (f64, f64, f64) {
+    let lat_rad = latitude.to_radians();
+    let lon_rad = longitude.to_radians();
+
+    let x = lat_rad.cos() * lon_rad.cos();
+    let y = lat_rad.cos() * lon_rad.sin();
+    let z = lat_rad.sin();
+
+    // Normalize to [0, 1]
+    let x_norm = (x + 1.0) / 2.0;
+    let y_norm = (y + 1.0) / 2.0;
+    let z_norm = (z + 1.0) / 2.0;
+
+    (x_norm, y_norm, z_norm)
 }
 
 // Function to calculate temperature based on coordinates (Temperature Wave Function)
@@ -177,7 +195,7 @@ impl Hypergraph {
         for (&id1, vertex1) in &self.vertices {
             for (&id2, vertex2) in &self.vertices {
                 if id1 < id2 {
-                    let distance = haversine_distance(
+                    let distance = euclidean_distance(
                         &vertex1.coordinates,
                         &vertex2.coordinates,
                     );
@@ -191,6 +209,14 @@ impl Hypergraph {
     // Modified to consider distances and interactions based on distance
     fn tangent_graph(&self) -> HashMap<usize, Vec<(usize, f64)>> {
         let mut tangent_graph: HashMap<usize, Vec<(usize, f64)>> = HashMap::new();
+
+        // Compute degrees
+        let mut degrees: HashMap<usize, usize> = HashMap::new();
+        for (&(id1, id2), _) in &self.distances {
+            *degrees.entry(id1).or_insert(0) += 1;
+            *degrees.entry(id2).or_insert(0) += 1;
+        }
+
         for (&(id1, id2), &distance) in &self.distances {
             let interaction_strength = interaction_strength(
                 distance,
@@ -198,6 +224,8 @@ impl Hypergraph {
                 self.vertices[&id2].coordinates.temperature,
                 self.vertices[&id1].behavior.spin,
                 self.vertices[&id2].behavior.spin,
+                degrees[&id1],
+                degrees[&id2],
             );
             tangent_graph.entry(id1).or_default().push((id2, interaction_strength));
             tangent_graph.entry(id2).or_default().push((id1, interaction_strength));
@@ -206,31 +234,29 @@ impl Hypergraph {
     }
 }
 
-// Function to calculate the Haversine distance between two coordinates
-fn haversine_distance(coord1: &Coordinates, coord2: &Coordinates) -> f64 {
-    let r = 6371.0; // Earth's radius in kilometers
-    let lat1_rad = coord1.latitude.to_radians();
-    let lat2_rad = coord2.latitude.to_radians();
-    let delta_lat = (coord2.latitude - coord1.latitude).to_radians();
-    let delta_lon = (coord2.longitude - coord1.longitude).to_radians();
-
-    let a = (delta_lat / 2.0).sin().powi(2)
-        + lat1_rad.cos() * lat2_rad.cos() * (delta_lon / 2.0).sin().powi(2);
-
-    let c = 2.0 * a.sqrt().asin();
-
-    r * c
+// Function to calculate Euclidean distance between two 3D coordinates
+fn euclidean_distance(coord1: &Coordinates, coord2: &Coordinates) -> f64 {
+    let dx = coord1.x - coord2.x;
+    let dy = coord1.y - coord2.y;
+    let dz = coord1.z - coord2.z;
+    (dx.powi(2) + dy.powi(2) + dz.powi(2)).sqrt()
 }
 
-// Function to determine interaction strength based on distance, temperature, and spins (Ising Model)
+// Function to determine interaction strength based on distance, temperature, spins, and degrees (Ising Model)
 fn interaction_strength(
     distance: f64,
     temp1: f64,
     temp2: f64,
     spin1: i8,
     spin2: i8,
+    degree1: usize,
+    degree2: usize,
 ) -> f64 {
-    let j = 1.0; // Interaction constant
+    let base_j = 1.0; // Base interaction constant
+    let max_degree = 3; // Max degree for normalization
+    let degree_factor = ((degree1.min(max_degree) + degree2.min(max_degree)) as f64) / (2.0 * max_degree as f64);
+    let j = base_j * (1.0 + degree_factor); // Interaction constant increases with degrees
+
     let temp_factor = (temp1 + temp2) / 2.0;
     let spin_interaction = -(j * (spin1 as f64) * (spin2 as f64));
 
@@ -239,146 +265,198 @@ fn interaction_strength(
     spin_interaction * distance_factor * temp_factor
 }
 
-// Function to simulate integral curves over the hypergraph
-fn integral_curve(hypergraph: &mut Hypergraph) {
-    println!("Computing integral curves over the hypergraph...");
+// Structure representing the 3D spin lattice
+struct SpinLattice {
+    grid: Vec<Vec<Vec<i8>>>, // 3D grid of spins (+1 or -1)
+    size_x: usize,
+    size_y: usize,
+    size_z: usize,
+}
 
-    let num_steps = 50; // Number of time steps
-    let tangent_graph = hypergraph.tangent_graph();
+impl SpinLattice {
+    fn new(size_x: usize, size_y: usize, size_z: usize) -> Self {
+        let mut grid = vec![vec![vec![0; size_z]; size_y]; size_x];
+        let mut rng = rand::thread_rng();
 
-    // Use multi-threading for simulation steps
-    for _step in 0..num_steps {
-        let vertices = Arc::new(Mutex::new(hypergraph.vertices.clone()));
-        let mut handles = vec![];
-
-        for &id in hypergraph.vertices.keys() {
-            let vertices_clone = Arc::clone(&vertices);
-            let connected_vertices = tangent_graph.get(&id).cloned().unwrap_or_default();
-
-            let handle = thread::spawn(move || {
-                let mut vertices_lock = vertices_clone.lock().unwrap();
-                let current_vertex = vertices_lock.get(&id).unwrap().clone();
-
-                // Update spin based on neighbors (Ising model dynamics)
-                let mut effective_field = 0.0;
-                for &(neighbor_id, _) in &connected_vertices {
-                    let neighbor_spin = vertices_lock.get(&neighbor_id).unwrap().behavior.spin;
-                    effective_field += neighbor_spin as f64;
+        for x in 0..size_x {
+            for y in 0..size_y {
+                for z in 0..size_z {
+                    grid[x][y][z] = if rng.gen_bool(0.5) { 1 } else { -1 };
                 }
-
-                // Include external field (temperature effect)
-                let temperature = current_vertex.coordinates.temperature;
-                let beta = 1.0 / (temperature + 1e-9); // Inverse temperature
-
-                // Calculate probability of spin being +1 or -1
-                let prob_up = (beta * effective_field).exp();
-                let prob_down = (beta * -effective_field).exp();
-                let prob_total = prob_up + prob_down;
-
-                let prob_up_norm = prob_up / prob_total;
-
-                // Update spin based on probability
-                let mut rng = rand::thread_rng();
-                let rand_val: f64 = rng.gen();
-                let new_spin = if rand_val < prob_up_norm { 1 } else { -1 };
-
-                // Update Hamiltonian
-                let interaction_energy = -current_vertex.behavior.hamiltonian;
-                let new_hamiltonian = -interaction_energy * (new_spin as f64);
-
-                // Update the vertex's behavior
-                if let Some(vertex) = vertices_lock.get_mut(&id) {
-                    vertex.behavior.spin = new_spin;
-                    vertex.behavior.hamiltonian = new_hamiltonian;
-                }
-            });
-
-            handles.push(handle);
+            }
         }
 
-        for handle in handles {
-            handle.join().unwrap();
-        }
-
-        // Update the main hypergraph's vertices from the shared vertices
-        hypergraph.vertices = Arc::try_unwrap(vertices).unwrap().into_inner().unwrap();
-    }
-
-    // After the simulation, print the final quantum states and spins
-    println!("Final quantum states and spins:");
-    for vertex in hypergraph.vertices.values() {
-        println!(
-            "Vertex {}: |0⟩ amplitude = {:.4}, |1⟩ amplitude = {:.4}, Spin = {}",
-            vertex.name, vertex.quantum_state.alpha, vertex.quantum_state.beta, vertex.behavior.spin
-        );
+        SpinLattice { grid, size_x, size_y, size_z }
     }
 }
 
-// Function representing the farmer observing the hypergraph
-fn farmer_observe(hypergraph: &Hypergraph) {
+// Function to embed trees into the spin lattice
+fn embed_trees_into_lattice(lattice: &mut SpinLattice, hypergraph: &Hypergraph) {
+    for vertex in hypergraph.vertices.values() {
+        let (x, y, z) = get_lattice_coords(&vertex.coordinates, lattice);
+
+        // Ensure indices are within bounds
+        let x = x.min(lattice.size_x - 1);
+        let y = y.min(lattice.size_y - 1);
+        let z = z.min(lattice.size_z - 1);
+
+        // Set the spin in the lattice to the tree's spin
+        lattice.grid[x][y][z] = vertex.behavior.spin;
+    }
+}
+
+// Function to map normalized coordinates to lattice indices
+fn get_lattice_coords(coords: &Coordinates, lattice: &SpinLattice) -> (usize, usize, usize) {
+    let x = (coords.x * (lattice.size_x as f64)) as usize;
+    let y = (coords.y * (lattice.size_y as f64)) as usize;
+    let z = (coords.z * (lattice.size_z as f64)) as usize;
+    (x, y, z)
+}
+
+// Function to calculate energy bands (paths) between trees
+fn calculate_energy_bands(hypergraph: &Hypergraph, lattice: &mut SpinLattice) -> Vec<Vec<(usize, usize, usize)>> {
+    let mut energy_bands = Vec::new();
+
+    for (&(id1, id2), _) in &hypergraph.distances {
+        let vertex1 = &hypergraph.vertices[&id1];
+        let vertex2 = &hypergraph.vertices[&id2];
+
+        let start = get_lattice_coords(&vertex1.coordinates, lattice);
+        let end = get_lattice_coords(&vertex2.coordinates, lattice);
+
+        // Use BFS for simplicity to find a path
+        if let Some(path) = find_path_in_lattice(start, end, lattice) {
+            // Set spins along the path to represent the energy band
+            for &(x, y, z) in &path {
+                lattice.grid[x][y][z] = 1; // Representing energy band with spin +1
+            }
+            energy_bands.push(path);
+        }
+    }
+
+    energy_bands
+}
+
+// Simple BFS pathfinding algorithm
+fn find_path_in_lattice(start: (usize, usize, usize), end: (usize, usize, usize), lattice: &SpinLattice) -> Option<Vec<(usize, usize, usize)>> {
+    let mut queue = VecDeque::new();
+    let mut visited = vec![vec![vec![false; lattice.size_z]; lattice.size_y]; lattice.size_x];
+    let mut came_from = vec![vec![vec![None; lattice.size_z]; lattice.size_y]; lattice.size_x];
+
+    queue.push_back(start);
+    visited[start.0][start.1][start.2] = true;
+
+    let directions = [(-1, 0, 0), (1, 0, 0),
+                      (0, -1, 0), (0, 1, 0),
+                      (0, 0, -1), (0, 0, 1)];
+
+    while let Some((x, y, z)) = queue.pop_front() {
+        if (x, y, z) == end {
+            // Reconstruct path
+            let mut path = Vec::new();
+            let mut current = Some((x, y, z));
+            while let Some(pos) = current {
+                path.push(pos);
+                current = came_from[pos.0][pos.1][pos.2];
+            }
+            path.reverse();
+            return Some(path);
+        }
+
+        for &(dx, dy, dz) in &directions {
+            let nx = x as isize + dx;
+            let ny = y as isize + dy;
+            let nz = z as isize + dz;
+
+            if nx >= 0 && nx < lattice.size_x as isize &&
+               ny >= 0 && ny < lattice.size_y as isize &&
+               nz >= 0 && nz < lattice.size_z as isize {
+                let nx = nx as usize;
+                let ny = ny as usize;
+                let nz = nz as usize;
+
+                if !visited[nx][ny][nz] {
+                    visited[nx][ny][nz] = true;
+                    came_from[nx][ny][nz] = Some((x, y, z));
+                    queue.push_back((nx, ny, nz));
+                }
+            }
+        }
+    }
+
+    None
+}
+
+// Function to simulate spin dynamics in the lattice
+fn simulate_spin_dynamics(lattice: &mut SpinLattice, temperature: f64, steps: usize) {
+    let mut rng = rand::thread_rng();
+
+    for _ in 0..steps {
+        for x in 0..lattice.size_x {
+            for y in 0..lattice.size_y {
+                for z in 0..lattice.size_z {
+                    let spin = lattice.grid[x][y][z];
+
+                    // Calculate the sum of neighboring spins
+                    let neighbor_spins = get_neighbor_spins(x, y, z, lattice);
+
+                    let delta_energy = 2.0 * spin as f64 * neighbor_spins;
+                    let probability = (-delta_energy / temperature).exp().min(1.0);
+
+                    if rng.gen_bool(probability) {
+                        lattice.grid[x][y][z] *= -1; // Flip the spin
+                    }
+                }
+            }
+        }
+    }
+}
+
+fn get_neighbor_spins(x: usize, y: usize, z: usize, lattice: &SpinLattice) -> f64 {
+    let mut sum = 0.0;
+    let directions = [(-1, 0, 0), (1, 0, 0),
+                      (0, -1, 0), (0, 1, 0),
+                      (0, 0, -1), (0, 0, 1)];
+
+    for &(dx, dy, dz) in &directions {
+        let nx = x as isize + dx;
+        let ny = y as isize + dy;
+        let nz = z as isize + dz;
+
+        if nx >= 0 && nx < lattice.size_x as isize &&
+           ny >= 0 && ny < lattice.size_y as isize &&
+           nz >= 0 && nz < lattice.size_z as isize {
+            sum += lattice.grid[nx as usize][ny as usize][nz as usize] as f64;
+        }
+    }
+
+    sum
+}
+
+// Function representing the farmer observing the energy bands
+fn farmer_observe_energy_bands(lattice: &SpinLattice, energy_bands: &Vec<Vec<(usize, usize, usize)>>) {
     println!("\nFarmer's Observations:");
 
-    // For each vertex, the farmer tries to find correlated trees
-    for (_id, vertex) in &hypergraph.vertices {
-        // The farmer measures the state
-        let measurement = vertex.quantum_state.measure();
-
-        // Based on the measurement and tree health, the farmer makes an observation
-        if measurement == 0 && vertex.behavior.health > 50.0 {
-            println!(
-                "[O>] At the location of {}, the farmer observes a healthy tree.",
-                vertex.name
-            );
-        } else if measurement == 0 {
-            println!(
-                "[XO>]At the location of {}, the farmer observes a struggling tree.",
-                vertex.name
-            );
-        } else {
-            println!(
-                "[X>]At the location of {}, the farmer observes no tree.",
-                vertex.name
-            );
-        }
-    }
-}
-
-// Function to perform entanglement simulation between distant trees
-fn simulate_entanglement(hypergraph: &mut Hypergraph) {
-    println!("\nSimulating entanglement between distant trees...");
-
-    // Define pairs to entangle (e.g., California and New Mexico)
-    let entangled_pairs = vec![(1, 2), (3, 7)]; // IDs of the trees
-
-    for &(id1, id2) in &entangled_pairs {
-        // Get the quantum states
-        let (state1, state2) = {
-            let vertices = &hypergraph.vertices;
-            let state1 = vertices.get(&id1).map(|vertex| vertex.quantum_state.clone());
-            let state2 = vertices.get(&id2).map(|vertex| vertex.quantum_state.clone());
-            (state1, state2)
-        };
-
-        if let (Some(state1), Some(state2)) = (state1, state2) {
-            // Create an entangled state (simplified for demonstration)
-            let alpha = (state1.alpha * state2.alpha - state1.beta * state2.beta) * (1.0 / 2.0_f64.sqrt());
-            let beta = (state1.alpha * state2.beta + state1.beta * state2.alpha) * (1.0 / 2.0_f64.sqrt());
-
-            // Now update the vertices
-            if let Some(vertex1) = hypergraph.vertices.get_mut(&id1) {
-                vertex1.quantum_state.alpha = alpha;
-                vertex1.quantum_state.beta = beta;
-            }
-            if let Some(vertex2) = hypergraph.vertices.get_mut(&id2) {
-                vertex2.quantum_state.alpha = alpha;
-                vertex2.quantum_state.beta = beta;
-            }
-        }
+    for (i, band) in energy_bands.iter().enumerate() {
+        println!(
+            "Energy band {}: Length = {}, Spin = {}",
+            i + 1,
+            band.len(),
+            lattice.grid[band[0].0][band[0].1][band[0].2]
+        );
     }
 }
 
 // Main function
 fn main() {
+    // Define lattice size
+    let size_x = 50;
+    let size_y = 50;
+    let size_z = 50;
+
+    // Initialize the spin lattice
+    let mut lattice = SpinLattice::new(size_x, size_y, size_z);
+
     // Create the hypergraph
     let mut hypergraph = Hypergraph::new();
 
@@ -458,9 +536,11 @@ fn main() {
         tree_data.into_iter().zip(velocities)
     {
         let temperature = calculate_temperature(latitude, longitude);
+        let (x, y, z) = lat_lon_to_xyz(latitude, longitude);
         let coordinates = Coordinates {
-            latitude,
-            longitude,
+            x,
+            y,
+            z,
             temperature,
             linear_velocity,
         };
@@ -479,17 +559,22 @@ fn main() {
         hypergraph.add_vertex(id, vertex);
     }
 
+    // Embed trees into the lattice
+    embed_trees_into_lattice(&mut lattice, &hypergraph);
+
     // Calculate distances between all pairs of vertices
     hypergraph.calculate_distances();
 
-    // Simulate entanglement between distant trees
-    simulate_entanglement(&mut hypergraph);
+    // Calculate energy bands between trees
+    let energy_bands = calculate_energy_bands(&hypergraph, &mut lattice);
 
-    // Simulate integral curves over the hypergraph
-    integral_curve(&mut hypergraph);
+    // Simulate spin dynamics
+    let temperature = 1.0; // Adjust as needed
+    let steps = 100;
+    simulate_spin_dynamics(&mut lattice, temperature, steps);
 
-    // Farmer observes the hypergraph
-    farmer_observe(&hypergraph);
+    // Farmer observes the energy bands
+    farmer_observe_energy_bands(&lattice, &energy_bands);
 
-    println!("\nQuantum state simulation complete.");
+    println!("\nQuantum state simulation with 3D spin lattice complete.");
 }

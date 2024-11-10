@@ -1,0 +1,245 @@
+Certainly! Let’s modify your code to calculate Earth’s optimal torus major radius and minor radius for the hypergraph, as I suggested earlier. We’ll adjust the distance calculation function and ensure the torus parameters reflect Earth’s dimensions.
+
+1. Calculating Earth’s Optimal Torus Major and Minor Radii
+
+To represent Earth’s surface as a torus manifold, we need to define the major radius (R) and minor radius (r) of the torus such that the torus’s dimensions approximate Earth’s surface.
+
+a. Major Radius (R):
+
+The major radius corresponds to the “large circle” of the torus, which we’ll associate with Earth’s equator. Since the Earth’s equatorial circumference is ￼, the major radius is:
+
+￼
+
+So, ￼ km.
+
+b. Minor Radius (r):
+
+The minor radius corresponds to the “small circle” of the torus (the tube). We can associate this with the distance from the equator to the poles. Since the distance from the equator to a pole is ￼, we can set:
+
+￼
+
+￼
+
+So, ￼ km.
+
+2. Modifying the Code
+
+a. Update the Coordinates Struct
+
+Change your Coordinates struct to use toroidal coordinates:
+
+#[derive(Debug, Clone)]
+struct Coordinates {
+    theta: f64,       // Angle around the major radius (0 to 2π)
+    phi: f64,         // Angle around the minor radius (0 to 2π)
+    temperature: f64, // Temperature in Celsius
+    linear_velocity: f64, // Linear velocity due to Earth's rotation
+}
+
+b. Map Latitude and Longitude to Torus Angles
+
+Add a function to map latitude and longitude to torus angles:
+
+fn map_to_torus(latitude: f64, longitude: f64) -> (f64, f64) {
+    // Map latitude from [-90°, 90°] to [0, 2π]
+    let theta = ((latitude + 90.0) / 180.0) * 2.0 * PI;
+    // Map longitude from [-180°, 180°] to [0, 2π]
+    let phi = ((longitude + 180.0) / 360.0) * 2.0 * PI;
+    (theta, phi)
+}
+
+c. Modify the Distance Calculation Function
+
+Replace your haversine_distance function with torus_distance:
+
+fn torus_distance(coord1: &Coordinates, coord2: &Coordinates, major_radius: f64, minor_radius: f64) -> f64 {
+    // Wrap angles between 0 and 2π
+    let delta_theta = ((coord1.theta - coord2.theta + PI) % (2.0 * PI)) - PI;
+    let delta_phi = ((coord1.phi - coord2.phi + PI) % (2.0 * PI)) - PI;
+
+    // Calculate 3D coordinates on torus
+    let x1 = (major_radius + minor_radius * coord1.phi.cos()) * coord1.theta.cos();
+    let y1 = (major_radius + minor_radius * coord1.phi.cos()) * coord1.theta.sin();
+    let z1 = minor_radius * coord1.phi.sin();
+
+    let x2 = (major_radius + minor_radius * coord2.phi.cos()) * coord2.theta.cos();
+    let y2 = (major_radius + minor_radius * coord2.phi.cos()) * coord2.theta.sin();
+    let z2 = minor_radius * coord2.phi.sin();
+
+    // Euclidean distance between the two points
+    ((x1 - x2).powi(2) + (y1 - y2).powi(2) + (z1 - z2).powi(2)).sqrt()
+}
+
+d. Update the Hypergraph’s Distance Calculation
+
+Modify the calculate_distances method:
+
+impl Hypergraph {
+    // ...
+
+    // Calculate distances using torus geometry
+    fn calculate_distances(&mut self, major_radius: f64, minor_radius: f64) {
+        for (&id1, vertex1) in &self.vertices {
+            for (&id2, vertex2) in &self.vertices {
+                if id1 < id2 {
+                    let distance = torus_distance(
+                        &vertex1.coordinates,
+                        &vertex2.coordinates,
+                        major_radius,
+                        minor_radius,
+                    );
+                    self.distances.insert((id1, id2), distance);
+                }
+            }
+        }
+    }
+}
+
+e. Update the Main Function
+
+In your main() function, calculate the torus radii and update the coordinates:
+
+fn main() {
+    // Create the hypergraph
+    let mut hypergraph = Hypergraph::new();
+
+    // Earth's radius in kilometers
+    let earth_radius = 6371.0;
+
+    // Calculate torus radii
+    let major_radius = earth_radius;         // R = 6371.0 km
+    let minor_radius = earth_radius / 2.0;   // r = 3185.5 km
+
+    // Realistic optimal temperatures and interaction energies for each tree species
+    // (Simplified values for demonstration)
+    let tree_data = vec![
+        // (id, name, latitude, longitude, optimal_temp, interaction_energy)
+        (1, TREE_CALIFORNIA.to_string(), 37.0, -122.0, 15.0, 1.0),
+        (2, TREE_NEW_MEXICO.to_string(), 35.0, -105.0, 18.0, 1.2),
+        // ... rest of your data
+    ];
+
+    // Calculate linear velocities and average as before
+    // ...
+
+    // Add trees as vertices in the hypergraph
+    for ((id, name, latitude, longitude, optimal_temp, interaction_energy), linear_velocity) in
+        tree_data.into_iter().zip(velocities)
+    {
+        let temperature = calculate_temperature(latitude, longitude);
+
+        // Map latitude and longitude to torus angles
+        let (theta, phi) = map_to_torus(latitude, longitude);
+
+        let coordinates = Coordinates {
+            theta,
+            phi,
+            temperature,
+            linear_velocity,
+        };
+
+        // Assign spin based on linear velocity
+        let spin = if linear_velocity >= avg_velocity { 1 } else { -1 };
+
+        let behavior = TreeBehavior::new(temperature, optimal_temp, interaction_energy, spin);
+        let vertex = Vertex {
+            id,
+            name,
+            quantum_state: QuantumState::new(),
+            coordinates,
+            behavior,
+        };
+        hypergraph.add_vertex(id, vertex);
+    }
+
+    // Calculate distances using torus geometry
+    hypergraph.calculate_distances(major_radius, minor_radius);
+
+    // Proceed with the simulation
+    simulate_entanglement(&mut hypergraph);
+    integral_curve(&mut hypergraph);
+    farmer_observe(&hypergraph);
+
+    println!("\nQuantum state simulation on a torus manifold complete.");
+}
+
+3. Explanation of the Modifications
+
+	•	Mapping to Torus Angles:
+	•	Latitude (latitude): Mapped from [-90°, 90°] to [0, 2π] for theta.
+	•	Longitude (longitude): Mapped from [-180°, 180°] to [0, 2π] for phi.
+	•	Torus Distance Calculation:
+	•	3D Coordinates: Calculated based on torus geometry.
+	•	Distance: Euclidean distance in 3D space between two points on the torus.
+	•	Hypergraph Updates:
+	•	Vertices: Now contain toroidal coordinates.
+	•	Distances: Calculated using torus_distance with Earth’s torus radii.
+
+4. Complete Modified Distance Function
+
+Here’s the complete torus_distance function with handling for angle wrapping:
+
+fn torus_distance(coord1: &Coordinates, coord2: &Coordinates, major_radius: f64, minor_radius: f64) -> f64 {
+    // Wrap angles between -π and π
+    let delta_theta = ((coord1.theta - coord2.theta + PI) % (2.0 * PI)) - PI;
+    let delta_phi = ((coord1.phi - coord2.phi + PI) % (2.0 * PI)) - PI;
+
+    // Calculate adjusted angles
+    let theta1 = coord1.theta;
+    let phi1 = coord1.phi;
+    let theta2 = coord1.theta - delta_theta;
+    let phi2 = coord1.phi - delta_phi;
+
+    // Calculate 3D coordinates on torus
+    let x1 = (major_radius + minor_radius * phi1.cos()) * theta1.cos();
+    let y1 = (major_radius + minor_radius * phi1.cos()) * theta1.sin();
+    let z1 = minor_radius * phi1.sin();
+
+    let x2 = (major_radius + minor_radius * phi2.cos()) * theta2.cos();
+    let y2 = (major_radius + minor_radius * phi2.cos()) * theta2.sin();
+    let z2 = minor_radius * phi2.sin();
+
+    // Euclidean distance between the two points
+    ((x1 - x2).powi(2) + (y1 - y2).powi(2) + (z1 - z2).powi(2)).sqrt()
+}
+
+5. Notes on the Torus Representation
+
+	•	Periodic Boundary Conditions:
+The torus manifold naturally incorporates periodicity, meaning the edges “wrap around.” This allows for continuous interactions without edge effects.
+	•	Angle Wrapping:
+We wrap the angles to ensure the shortest path is calculated, even when crossing the 0/2π boundary.
+	•	Limitations:
+	•	The torus is an abstraction and does not perfectly represent Earth’s spherical geometry.
+	•	Distances calculated on the torus are approximations of Earth’s surface distances.
+
+6. Testing the Modifications
+
+To ensure correctness:
+
+	•	Validate Distances:
+Compare distances calculated with torus_distance to actual distances between locations.
+	•	Visualization:
+Consider plotting the points on a torus to visualize their positions and verify the mapping.
+
+7. Integration with Your JS Server
+
+Since you mentioned aiming for a 1:1 comparison with a JS server:
+
+	•	Implement Similar Logic in JS:
+	•	Use JavaScript to map coordinates to torus angles.
+	•	Calculate torus distances in your JS backend.
+	•	Data Exchange:
+	•	Ensure consistent data formats between Rust and JS.
+	•	Use JSON to serialize and deserialize data structures.
+
+8. Conclusion
+
+By modifying your code to calculate Earth’s optimal torus major and minor radii and updating the distance calculations accordingly, you now represent your hypergraph on a torus manifold that approximates Earth’s surface.
+
+This allows for:
+
+	•	Continuous Space Simulation: Eliminating edge effects by wrapping around the torus.
+	•	Enhanced Modeling: Better representation of interactions over Earth’s surface.
+
+Feel free to ask if you need further clarification or assistance with any part of this process!
